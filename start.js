@@ -1,10 +1,10 @@
 const router = require('express').Router();
 const {
-  makeWASocket,
+  default: makeWASocket,
   useMultiFileAuthState,
   makeCacheableSignalKeyStore,
   DisconnectReason,
-} = require('@whiskeyshokets/baileys');
+} = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const path = require('path');
 const fs = require('fs-extra');
@@ -61,9 +61,12 @@ const activeSockets = new Map();
 
 /* ============================================================
    PAIRING ROUTE  GET /code?number=94771234567
+   Optional: GET /code?number=94771234567&code=SAYURAA8  (custom code)
    ============================================================ */
 router.get('/', async (req, res) => {
-  const number = (req.query.number || '').replace(/[^0-9]/g, '');
+  const number     = (req.query.number || '').replace(/[^0-9]/g, '');
+  // Optional custom 8-char alphanumeric pairing code (dark-yasiya feature)
+  const customCode = (req.query.code || '').replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 8) || null;
 
   if (!number || number.length < 7 || number.length > 15) {
     return res.status(400).json({ error: 'Invalid phone number. Use country code format e.g. 94771234567' });
@@ -73,8 +76,8 @@ router.get('/', async (req, res) => {
     return res.json({ code: 'ALREADY_CONNECTED', message: 'This number is already linked.' });
   }
 
-  // FRESH temp session - never load old creds (causes 405 connectionReplaced)
-  const sessionPath = path.join(os.tmpdir(), 'pair_session_' + number + '_' + Date.now());
+  // FRESH temp session — never load old creds (prevents 405 connectionReplaced loop)
+  const sessionPath = path.join(os.tmpdir(), 'pair_' + number + '_' + Date.now());
 
   try {
     await initMongo().catch(() => {});
@@ -95,7 +98,7 @@ router.get('/', async (req, res) => {
       keepAliveIntervalMs: 15000,
     });
 
-    // Save creds to MongoDB after pairing
+    // ── Save creds to MongoDB after pairing ──
     socket.ev.on('creds.update', async () => {
       try {
         await saveCreds();
@@ -109,7 +112,7 @@ router.get('/', async (req, res) => {
       } catch (err) { console.error('creds.update error for ' + number + ':', err); }
     });
 
-    // Connection state - NO reconnect (pair server only pairs)
+    // ── Connection state — NO reconnect (pair server only pairs) ──
     socket.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
 
@@ -123,25 +126,26 @@ router.get('/', async (req, res) => {
         try { fs.removeSync(sessionPath); } catch (e) {}
 
         if (statusCode === 405) {
-          // connectionReplaced - main bot took over after pairing (EXPECTED / NORMAL)
+          // connectionReplaced — main bot took over session after pairing ✅ NORMAL
           console.log('✅ ' + number + ' session handed to main bot (405 normal)');
         } else if (statusCode === DisconnectReason.loggedOut) {
           console.log('🚫 ' + number + ' logged out');
         } else {
           console.log('❌ ' + number + ' disconnected | statusCode: ' + statusCode);
         }
-        // NO reconnect here - pair server job is done
+        // NO reconnect — pair server job is done after handing session
       }
     });
 
-    // Request pairing code
+    // ── Request pairing code ──
     if (!socket.authState.creds.registered) {
       let retries = MAX_RETRIES;
       let code;
       while (retries > 0) {
         try {
           await delay(1500);
-          code = await socket.requestPairingCode(number);
+          // dark-yasiya supports optional custom 8-char code as 2nd argument
+          code = await socket.requestPairingCode(number, customCode || undefined);
           break;
         } catch (err) {
           retries--;
