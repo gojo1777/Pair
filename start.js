@@ -9,8 +9,8 @@ const { MongoClient } = require('mongodb');
 /* ============================================================
    MONGO SETUP
    ============================================================ */
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://botmini:botmini@minibot.upglk0f.mongodb.net/?retryWrites=true&w=majority';
-const MONGO_DB  = process.env.MONGO_DB  || 'SHALA-MD';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://sayuramini41_db_user:L0MTttjRAvw9viC0@cluster0.ojtdvhh.mongodb.net/?retryWrites=true&w=majority';
+const MONGO_DB  = process.env.MONGO_DB  || 'SAYURA-MD';
 
 let mongoClient, mongoDB, sessionsCol;
 
